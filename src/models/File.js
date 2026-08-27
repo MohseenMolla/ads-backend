@@ -6,25 +6,23 @@ const fileSchema = new mongoose.Schema({
     ref: "User",
     required: true
   },
-
   title: {
     type: String,
     required: true
   },
-
   type: {
     type: String,
     enum: ["file", "link", "text"],
     required: true
   },
-
   fileUrl: String,
   publicId: String,
-
+  resourceType: {
+    type: String,
+    default: "raw"
+  },
   link: String,
-
   text: String
-
 }, { timestamps: true });
 
 export default mongoose.model("File", fileSchema);
