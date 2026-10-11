@@ -16,11 +16,18 @@ export const signup = async (req, res) => {
   const user = await User.create({
     name,
     studentId,
-    password: hashed
+    password: hashed,
+    role: "user",
   });
 
-  res.json({
-    token: generateToken(user._id)
+  res.status(201).json({
+    token: generateToken(user._id),
+    user: {
+      _id: user._id,
+      name: user.name,
+      studentId: user.studentId,
+      role: user.role || "user",
+    },
   });
 };
 
@@ -39,13 +46,20 @@ export const login = async (req, res) => {
     return res.status(400).json({ message: "Wrong password" });
   }
 
+  // Include user data and role with the token
   res.json({
-    token: generateToken(user._id)
+    token: generateToken(user._id),
+    user: {
+      _id: user._id,
+      name: user.name,
+      studentId: user.studentId,
+      role: user.role || "user",
+    },
   });
 };
 
 export const logout = async (req, res) => {
   res.json({
-    message: "User logged out successfully"
+    message: "User logged out successfully",
   });
 };
