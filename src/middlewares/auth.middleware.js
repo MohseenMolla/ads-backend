@@ -37,6 +37,21 @@ export const verifyToken = async (req, res, next) => {
   }
 };
 
+// Optional JWT authentication: populates req.user if valid token provided, but doesn't block if missing
+export const optionalAuth = async (req, res, next) => {
+  try {
+    let token = req.headers.authorization;
+    if (token && token.startsWith("Bearer ")) {
+      token = token.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await User.findById(decoded.id).select("-password");
+    }
+  } catch (error) {
+    req.user = null;
+  }
+  next();
+};
+
 // Admin authorization middleware
 export const isAdmin = (req, res, next) => {
   if (req.user && req.user.role === "admin") {

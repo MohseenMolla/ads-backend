@@ -1,5 +1,5 @@
 import express from "express";
-import protect from "../middlewares/auth.middleware.js";
+import { verifyToken, optionalAuth } from "../middlewares/auth.middleware.js";
 import multer from "multer";
 
 import {
@@ -11,17 +11,18 @@ import {
 } from "../controllers/file.controller.js";
 
 const router = express.Router();
-
 const upload = multer({ dest: "uploads/" });
 
-router.post("/upload", protect, upload.single("file"), uploadFile);
+// File uploads: supports both POST / and POST /upload
+router.post("/upload", verifyToken, upload.single("file"), uploadFile);
+router.post("/", verifyToken, upload.single("file"), uploadFile);
 
-router.post("/link", protect, saveLink);
+router.post("/link", verifyToken, saveLink);
+router.post("/text", verifyToken, saveText);
 
-router.post("/text", protect, saveText);
+// GET files: supports personal files, course materials, or all files for admins
+router.get("/", optionalAuth, getMyFiles);
 
-router.get("/", protect, getMyFiles);
-
-router.delete("/:id", protect, deleteFile);
+router.delete("/:id", verifyToken, deleteFile);
 
 export default router;

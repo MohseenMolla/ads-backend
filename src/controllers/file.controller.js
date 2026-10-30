@@ -17,7 +17,7 @@ export const uploadFile = async (req, res) => {
     
     // Cloudinary route configuration:
     // Images use "image" resource_type without suffixing ext in public_id
-    // PDFs, DOCX, ZIP, etc. use "raw" resource_type and REQUIRE the extension in public_id
+    // PDFs, DOCX, ZIP, PPT, etc. use "raw" resource_type and REQUIRE the extension in public_id
     const resourceType = isImage ? "image" : "raw";
     const cleanPublicId = isImage 
       ? `${baseName}_${Date.now()}` 
@@ -37,6 +37,7 @@ export const uploadFile = async (req, res) => {
 
     const file = await File.create({
       user: req.user._id,
+      courseId: req.body.courseId || null,
       title: req.body.title || req.file.originalname,
       type: "file",
       fileUrl: result.secure_url,
@@ -55,9 +56,10 @@ export const uploadFile = async (req, res) => {
 
 export const saveLink = async (req, res) => {
   try {
-    const { title, link } = req.body;
+    const { title, link, courseId } = req.body;
     const data = await File.create({
       user: req.user._id,
+      courseId: courseId || null,
       title,
       type: "link",
       link,
@@ -70,9 +72,10 @@ export const saveLink = async (req, res) => {
 
 export const saveText = async (req, res) => {
   try {
-    const { title, text } = req.body;
+    const { title, text, courseId } = req.body;
     const data = await File.create({
       user: req.user._id,
+      courseId: courseId || null,
       title,
       type: "text",
       text,
@@ -85,7 +88,21 @@ export const saveText = async (req, res) => {
 
 export const getMyFiles = async (req, res) => {
   try {
-    const files = await File.find({ user: req.user._id });
+    const filter = {};
+
+    if (req.query.courseId) {
+      filter.courseId = req.query.courseId;
+    } else if (req.query.all === "true" || (req.user && req.user.role === "admin" && !req.query.personal)) {
+      // Return all files/slides for admin or when specifically requested
+    } else if (req.user) {
+      // User's private files
+      filter.user = req.user._id;
+    } else {
+      // If unauthenticated, only return public course materials
+      filter.courseId = { $ne: null };
+    }
+
+    const files = await File.find(filter).sort({ createdAt: -1 });
     res.json(files);
   } catch (error) {
     res.status(500).json({ message: error.message });
