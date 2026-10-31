@@ -28,9 +28,6 @@ const getGroqClient = () => {
   return groqClient;
 };
 
-// Helper: Pause execution for delay ms
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // Normalizes Gemini model names
 const normalizeGeminiModel = (name) => {
   if (!name || name === "gemini-2.5-flash" || name === "gemini-2.0-flash" || name.includes("1.5")) {
@@ -52,7 +49,7 @@ export const generateOpenRouterResponse = async (prompt, modelName = "openai/gpt
 
   // Normalize model slug to active OpenRouter models
   let activeModel = modelName;
-  if (!activeModel || activeModel === "gemini-3.5-flash") {
+  if (!activeModel || activeModel.includes("gpt")) {
     activeModel = "openai/gpt-4o-mini";
   } else if (activeModel.includes("deepseek")) {
     activeModel = "deepseek/deepseek-chat";
@@ -60,13 +57,15 @@ export const generateOpenRouterResponse = async (prompt, modelName = "openai/gpt
     activeModel = "anthropic/claude-haiku-4.5";
   } else if (activeModel.includes("llama")) {
     activeModel = "meta-llama/llama-3.3-70b-instruct";
+  } else {
+    activeModel = "openai/gpt-4o-mini";
   }
 
   // Build message content (multimodal if image is attached)
   let messageContent = prompt;
   if (image && image.data && image.mimeType) {
     messageContent = [
-      { type: "text", text: prompt || "Analyze this image and describe what you see." },
+      { type: "text", text: prompt || "Analyze this attached file/image in detail and describe what you see." },
       {
         type: "image_url",
         image_url: {
@@ -99,7 +98,10 @@ export const generateOpenRouterResponse = async (prompt, modelName = "openai/gpt
 
     return data.choices[0]?.message?.content || "";
   } catch (error) {
-    console.warn(`[OpenRouter Error on ${activeModel}] ${error.message}. Falling back to Groq.`);
+    console.warn(`[OpenRouter Error on ${activeModel}] ${error.message}.`);
+    if (image) {
+      return await generateGeminiResponse(prompt, "gemini-3.5-flash", image);
+    }
     return await generateGroqResponse(prompt, "qwen/qwen3.8-27b");
   }
 };
@@ -125,7 +127,7 @@ export const generateGroqResponse = async (prompt, modelName = "qwen/qwen3.8-27b
 
   try {
     const chatCompletion = await client.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "user", content: prompt || "Hello" }],
       model: targetModel,
       temperature: 0.7,
       max_tokens: 2048,
@@ -149,7 +151,7 @@ export const generateGeminiResponse = async (
   const primaryModel = normalizeGeminiModel(modelName);
 
   // Prepare multimodal content if image is attached
-  let contents = prompt;
+  let contents = prompt || "Analyze this content in detail.";
   if (image && image.data && image.mimeType) {
     contents = [
       {
@@ -161,7 +163,7 @@ export const generateGeminiResponse = async (
               data: image.data,
             },
           },
-          { text: prompt || "Analyze this image in detail and answer any relevant questions." },
+          { text: prompt || "Analyze this attached file/image in detail and explain its contents." },
         ],
       },
     ];

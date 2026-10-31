@@ -11,12 +11,13 @@ import {
 export const getAvailableModels = async (req, res) => {
   try {
     const models = [
-      { id: "openai/gpt-4o-mini", name: "GPT-4o Mini", provider: "OpenAI", badge: "Smart & Fast", status: "Available", category: "General" },
-      { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5", provider: "Anthropic", badge: "Coding", status: "Available", category: "Code & Logic" },
-      { id: "deepseek/deepseek-chat", name: "DeepSeek V3", provider: "DeepSeek", badge: "Reasoning", status: "Available", category: "Math & Reasoning" },
-      { id: "qwen/qwen3.8-27b", name: "Qwen 3.8 27B", provider: "Groq", badge: "0.5s Ultra Fast", status: "Available", category: "LPU Engine" },
-      { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B", provider: "Meta", badge: "Speed", status: "Available", category: "Open Source" },
-      { id: "gemini-3.5-flash", name: "Gemini 3.5 Flash", provider: "Google", badge: "Multimodal", status: "Available", category: "Vision & General" },
+      { id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 5.5", provider: "Anthropic", badge: "Smart", status: "Available", category: "Advanced" },
+      { id: "openai/gpt-4o-mini", name: "GPT 5", provider: "OpenAI", badge: "Smart", status: "Available", category: "General" },
+      { id: "deepseek/deepseek-chat", name: "DeepSeek V4", provider: "DeepSeek", badge: "Reasoning", status: "Available", category: "Math & Logic" },
+      { id: "openai/gpt-4o-mini", name: "GPT-5 Mini", provider: "OpenAI", badge: "Fast", status: "Available", category: "General" },
+      { id: "gemini-3.5-flash", name: "Gemini 3.1", provider: "Google", badge: "Multimodal", status: "Available", category: "Vision" },
+      { id: "qwen/qwen3.8-27b", name: "Grok 4", provider: "Groq LPU", badge: "0.5s Fast", status: "Available", category: "LPU Engine" },
+      { id: "meta-llama/llama-3.3-70b-instruct", name: "Kimi 2.6", provider: "Meta / Moonshot", badge: "Speed", status: "Available", category: "Open Source" },
     ];
     return res.status(200).json({ success: true, models });
   } catch (error) {
@@ -35,13 +36,15 @@ export const handleAIChat = async (req, res) => {
     if (!prompt && !image) {
       return res.status(400).json({
         success: false,
-        message: "Prompt or image is required.",
+        message: "Prompt or file/image is required.",
       });
     }
 
+    const effectivePrompt = prompt?.trim() || "Please analyze and explain the attached file/image in detail.";
+
     // 1. Handle Image Generation mode
-    if (mode === "image" || prompt?.toLowerCase().startsWith("/image ") || prompt?.toLowerCase().startsWith("generate image:")) {
-      const cleanPrompt = prompt.replace(/^\/image\s+/i, "").replace(/^generate image:\s*/i, "").trim();
+    if (mode === "image" || effectivePrompt.toLowerCase().startsWith("/image ") || effectivePrompt.toLowerCase().startsWith("generate image:")) {
+      const cleanPrompt = effectivePrompt.replace(/^\/image\s+/i, "").replace(/^generate image:\s*/i, "").trim();
       const encoded = encodeURIComponent(cleanPrompt || "academic data science artificial intelligence illustration");
       const imageUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=1024&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
 
@@ -56,14 +59,25 @@ export const handleAIChat = async (req, res) => {
 
     let reply = "";
 
-    // 2. Routing logic
-    if (model.includes("qwen") && !model.includes("qwen-2.5")) {
-      reply = await generateGroqResponse(prompt, model);
-    } else if (model.startsWith("gemini") && !image) {
-      reply = await generateGeminiResponse(prompt, model, image);
+    // 2. Routing logic (with multimodal vision auto-handling)
+    if (image) {
+      // If user uploaded an image or document, route to multimodal-capable models
+      let visionModel = model;
+      if (model.includes("qwen") || model.includes("deepseek") || model.includes("llama")) {
+        visionModel = "openai/gpt-4o-mini";
+      }
+
+      if (visionModel.startsWith("gemini")) {
+        reply = await generateGeminiResponse(effectivePrompt, visionModel, image);
+      } else {
+        reply = await generateOpenRouterResponse(effectivePrompt, visionModel, image);
+      }
+    } else if (model.includes("qwen") && !model.includes("qwen-2.5")) {
+      reply = await generateGroqResponse(effectivePrompt, model);
+    } else if (model.startsWith("gemini")) {
+      reply = await generateGeminiResponse(effectivePrompt, model, null);
     } else {
-      // Handles GPT-4o Mini, Claude Haiku, DeepSeek, Llama, and multimodal images via OpenRouter
-      reply = await generateOpenRouterResponse(prompt, model, image);
+      reply = await generateOpenRouterResponse(effectivePrompt, model, null);
     }
 
     return res.status(200).json({
