@@ -26,7 +26,7 @@ export const createCourse = async (req, res) => {
   }
 };
 
-// @desc    Get all courses (supports optional ?semesterId= query)
+// @desc    Get all courses (supports optional ?semesterId= query, attaches slide fileCount)
 // @route   GET /api/courses
 export const getAllCourses = async (req, res) => {
   try {
@@ -35,8 +35,16 @@ export const getAllCourses = async (req, res) => {
       filter.semesterId = req.query.semesterId;
     }
 
-    const courses = await Course.find(filter).populate("semesterId", "title term");
-    res.status(200).json({ success: true, count: courses.length, data: courses });
+    const courses = await Course.find(filter).populate("semesterId", "title term").lean();
+    const courseIds = courses.map((c) => c._id);
+    const files = await File.find({ courseId: { $in: courseIds } }, "_id courseId").lean();
+
+    const coursesWithCount = courses.map((c) => ({
+      ...c,
+      fileCount: files.filter((f) => f.courseId && f.courseId.toString() === c._id.toString()).length,
+    }));
+
+    res.status(200).json({ success: true, count: coursesWithCount.length, data: coursesWithCount });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -46,13 +54,13 @@ export const getAllCourses = async (req, res) => {
 // @route   GET /api/courses/:id
 export const getCourseById = async (req, res) => {
   try {
-    const course = await Course.findById(req.params.id).populate("semesterId", "title term");
+    const course = await Course.findById(req.params.id).populate("semesterId", "title term examRoutineUrl classRoutineUrl");
     if (!course) {
       return res.status(404).json({ success: false, message: "Course not found" });
     }
 
     // Finds all slides/topics linked to this course from your existing File model
-    const files = await File.find({ courseId: req.params.id }).sort({ createdAt: 1 });
+    const files = await File.find({ courseId: req.params.id }).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -95,8 +103,11 @@ export const deleteCourse = async (req, res) => {
       return res.status(404).json({ success: false, message: "Course not found" });
     }
 
+    // Clean up all associated slide files
+    await File.deleteMany({ courseId: req.params.id });
     await course.deleteOne();
-    res.status(200).json({ success: true, message: "Course removed successfully" });
+
+    res.status(200).json({ success: true, message: "Course and its slides removed successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

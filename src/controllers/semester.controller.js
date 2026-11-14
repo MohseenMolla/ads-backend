@@ -1,5 +1,6 @@
 import Semester from "../models/Semester.js";
 import Course from "../models/Course.js";
+import File from "../models/File.js";
 
 // @desc    Create a new semester
 // @route   POST /api/semesters
@@ -13,7 +14,7 @@ export const createSemester = async (req, res) => {
 
     const semester = await Semester.create({
       title,
-      term,
+      term: term || "",
       examRoutineUrl: examRoutineUrl || "",
       classRoutineUrl: classRoutineUrl || "",
     });
@@ -24,12 +25,26 @@ export const createSemester = async (req, res) => {
   }
 };
 
-// @desc    Get all semesters
+// @desc    Get all semesters (with courses populated)
 // @route   GET /api/semesters
 export const getAllSemesters = async (req, res) => {
   try {
-    const semesters = await Semester.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, count: semesters.length, data: semesters });
+    const semesters = await Semester.find().sort({ createdAt: -1 }).lean();
+    const semesterIds = semesters.map((s) => s._id);
+    const courses = await Course.find({ semesterId: { $in: semesterIds } }).lean();
+
+    const semestersWithCourses = semesters.map((sem) => ({
+      ...sem,
+      courses: courses.filter(
+        (c) => c.semesterId && c.semesterId.toString() === sem._id.toString()
+      ),
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: semestersWithCourses.length,
+      data: semestersWithCourses,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -87,17 +102,19 @@ export const deleteSemester = async (req, res) => {
       return res.status(404).json({ success: false, message: "Semester not found" });
     }
 
-    // Safely unlink associated courses instead of deleting them outright
-    await Course.updateMany(
-      { semesterId: req.params.id },
-      { $set: { semesterId: null } }
-    );
+    // Find and delete courses and their slide files associated with this semester
+    const courses = await Course.find({ semesterId: req.params.id });
+    const courseIds = courses.map((c) => c._id);
+    if (courseIds.length > 0) {
+      await File.deleteMany({ courseId: { $in: courseIds } });
+      await Course.deleteMany({ semesterId: req.params.id });
+    }
 
     await semester.deleteOne();
 
     res.status(200).json({
       success: true,
-      message: "Semester deleted and associated courses unlinked safely",
+      message: "Semester and all its courses deleted successfully",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
