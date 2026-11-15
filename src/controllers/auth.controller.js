@@ -18,6 +18,8 @@ export const signup = async (req, res) => {
     studentId,
     password: hashed,
     role: "user",
+    lastLogin: new Date(),
+    lastActive: new Date(),
   });
 
   res.status(201).json({
@@ -45,6 +47,10 @@ export const login = async (req, res) => {
   if (!match) {
     return res.status(400).json({ message: "Wrong password" });
   }
+
+  user.lastLogin = new Date();
+  user.lastActive = new Date();
+  await user.save();
 
   // Include user data and role with the token
   res.json({
